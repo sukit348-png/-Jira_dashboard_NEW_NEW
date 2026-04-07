@@ -2,33 +2,34 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8" />
-<title>SGLS Executive Dashboard - Interactive Summary</title>
+<title>SGLS Dashboard - Assignee Severity Workload</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <style>
 :root{ --bg:#f8fafc; --primary:#2563eb; --danger:#e11d48; --success:#10b981; --warning:#f59e0b; --border:#e2e8f0; --font:"IBM Plex Sans Thai",sans-serif; }
 body{ background:var(--bg); font-family:var(--font); padding:24px; color:#1e293b; }
-.container{ max-width:1300px; margin:0 auto; }
+.container{ max-width:1500px; margin:0 auto; }
 .card{ background:#fff; border-radius:12px; padding:24px; border:1px solid var(--border); margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
 .stats-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
 .stat-card{ background:#fff; padding:20px; border-radius:12px; border:1px solid var(--border); text-align:center; }
 .stat-val{ font-size:32px; font-weight:700; }
 
 table{ width:100%; border-collapse:collapse; font-size:13px; }
-th{ text-align:left; padding:12px; background:#f8fafc; border-bottom:1px solid var(--border); position: sticky; top: 0; }
+th{ text-align:left; padding:12px; background:#f8fafc; border-bottom:1px solid var(--border); position: sticky; top: 0; z-index: 10; }
 td{ padding:12px; border-bottom:1px solid var(--border); }
 
-.badge{ padding:3px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.badge{ padding:3px 8px; border-radius:4px; font-size:11px; font-weight:600; white-space: nowrap; }
 .b-done{ background:#ecfdf5; color:var(--success); }
 .b-pending{ background:#fff1f2; color:var(--danger); }
 .clickable { cursor: pointer; text-decoration: underline; transition: 0.2s; }
-.clickable:hover { opacity: 0.7; transform: scale(1.1); display: inline-block; }
+.clickable:hover { color: var(--primary); font-weight: bold; }
 
 .upload-btn{ background:var(--primary); color:#fff; padding:12px 24px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
-#debugInfo { color: #e11d48; font-family: monospace; font-size: 13px; margin-top: 15px; }
+.scroll-container { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
 
-/* Highlight row เมื่อเลือกดู */
-.active-row { background-color: #f0f7ff !important; }
+.text-done { color: var(--success); font-weight: 600; }
+.text-pending { color: var(--danger); font-weight: 600; }
+.sev-cell { text-align: center; border-left: 1px solid #f1f5f9; }
 </style>
 </head>
 <body>
@@ -36,23 +37,42 @@ td{ padding:12px; border-bottom:1px solid var(--border); }
 <div class="container">
   <div id="uploadZone" class="card" style="text-align:center; border:2px dashed var(--border);">
     <h2>SGLS Quality Dashboard</h2>
-    <p style="color:#64748b; margin-bottom:20px;">เลือกไฟล์ CSV จาก Jira เพื่อดูสรุปผลงาน</p>
+    <p style="color:#64748b; margin-bottom:20px;">โหลดไฟล์ CSV เพื่อดูภาระงานรายบุคคลแบ่งตาม Severity</p>
     <input type="file" id="csvFile" accept=".csv" style="display:none">
-    <button class="upload-btn" onclick="document.getElementById('csvFile').click()">Load Jira CSV</button>
-    <div id="debugInfo"></div>
+    <button class="upload-btn" onclick="document.getElementById('csvFile').click()">เลือกไฟล์ Jira CSV</button>
   </div>
 
   <div id="dashboard" style="display:none">
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-val" id="totalI">0</div><div>Total Issues</div></div>
-      <div class="stat-card" style="color:var(--success)"><div class="stat-val" id="totalD">0</div><div>Done (Resolved)</div></div>
-      <div class="stat-card" style="color:var(--danger)"><div class="stat-val" id="totalP">0</div><div>Pending (Backlog)</div></div>
+      <div class="stat-card" style="color:var(--success)"><div class="stat-val" id="totalD">0</div><div>Done</div></div>
+      <div class="stat-card" style="color:var(--danger)"><div class="stat-val" id="totalP">0</div><div>Pending</div></div>
       <div class="stat-card" style="color:var(--warning)"><div class="stat-val" id="totalC">0%</div><div>Success Rate</div></div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:5px; color:var(--primary);">Module Summary Table</h3>
-      <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">* คลิกที่ตัวเลข Done หรือ Pending เพื่อกรองดูรายการด้านล่าง</p>
+      <h3 style="margin-bottom:10px; color:var(--primary);">Assignee Workload by Severity (เฉพาะงานที่ยังไม่เสร็จ)</h3>
+      <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">* ตัวเลขในช่อง Severity คือจำนวนงานค้าง (Pending) คลิกเพื่อดูรายการด้านล่าง</p>
+      <div class="scroll-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Assignee Name</th>
+              <th class="sev-cell">Highest</th>
+              <th class="sev-cell">High</th>
+              <th class="sev-cell">Medium</th>
+              <th class="sev-cell">Low</th>
+              <th class="sev-cell" style="background:#ecfdf5">Done (All)</th>
+              <th class="sev-cell" style="background:#fff1f2">Total Pending</th>
+            </tr>
+          </thead>
+          <tbody id="assigneeSummaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:10px; color:var(--primary);">Module Detailed Breakdown</h3>
       <table>
         <thead>
           <tr>
@@ -61,7 +81,7 @@ td{ padding:12px; border-bottom:1px solid var(--border); }
             <th>High (D/P)</th>
             <th>Medium (D/P)</th>
             <th>Low (D/P)</th>
-            <th style="background:#edf2f7">Total (D/P)</th>
+            <th style="background:#f1f5f9">Total (D/P)</th>
           </tr>
         </thead>
         <tbody id="moduleDetailBody"></tbody>
@@ -70,10 +90,10 @@ td{ padding:12px; border-bottom:1px solid var(--border); }
 
     <div class="card" style="padding:0; overflow:hidden;">
       <div id="listHeader" style="padding:15px 24px; background:#fcfcfc; border-bottom:1px solid var(--border); font-weight:600; display:flex; justify-content:space-between; align-items:center;">
-        <span id="currentListTitle">📋 รายการทั้งหมด (Pending)</span>
-        <button onclick="renderTable(allGlobalIssues.filter(i => !i.isDone))" style="font-size:11px; cursor:pointer;">Show All Pending</button>
+        <span id="currentListTitle">📋 รายการ Pending ทั้งหมด</span>
+        <button onclick="renderTable(allGlobalIssues.filter(i => !i.isDone))" style="font-size:11px; cursor:pointer;">แสดง Pending ทั้งหมด</button>
       </div>
-      <div style="max-height: 600px; overflow-y: auto;">
+      <div class="scroll-container" style="max-height: 600px;">
         <table>
           <thead>
             <tr>
@@ -81,6 +101,7 @@ td{ padding:12px; border-bottom:1px solid var(--border); }
               <th>Severity</th>
               <th>Module</th>
               <th>Status</th>
+              <th>Assignee</th>
               <th>Due Date</th>
               <th>Summary</th>
             </tr>
@@ -102,19 +123,18 @@ function formatDate(dateStr) {
   return dateStr.split(' ')[0];
 }
 
-function filterByModuleAndStatus(moduleName, statusType, severity = null) {
-  let filtered = allGlobalIssues.filter(i => i.label === moduleName);
-  
+function filterList(type, name, statusType, sev = null) {
+  let filtered = [];
+  if (type === 'module') filtered = allGlobalIssues.filter(i => i.label === name);
+  if (type === 'assignee') filtered = allGlobalIssues.filter(i => i.assignee === name);
+
   if (statusType === 'done') filtered = filtered.filter(i => i.isDone);
-  else filtered = filtered.filter(i => !i.isDone);
+  else if (statusType === 'pending') filtered = filtered.filter(i => !i.isDone);
 
-  if (severity) filtered = filtered.filter(i => i.priority === severity);
+  if (sev) filtered = filtered.filter(i => i.priority === sev);
 
-  const title = `รายการ: ${moduleName} | สถานะ: ${statusType.toUpperCase()} ${severity ? '| Severity: '+severity : ''}`;
-  document.getElementById('currentListTitle').innerText = title;
+  document.getElementById('currentListTitle').innerText = `รายการ: ${name} | สถานะ: ${statusType.toUpperCase()} ${sev ? '| Sev: '+sev : ''}`;
   renderTable(filtered);
-  
-  // เลื่อนหน้าจอลงมาที่ตารางรายการ
   document.getElementById('listHeader').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -124,8 +144,9 @@ function renderTable(dataList) {
     <tr>
       <td style="padding-left:24px"><a href="${JIRA_BASE_URL}${i.key}" target="_blank" style="color:var(--primary); font-weight:600; text-decoration:none;">${i.key}</a></td>
       <td><span class="badge ${i.priority === 'Highest' || i.priority === 'High' ? 'b-pending' : ''}" style="border:1px solid #ddd">${i.priority}</span></td>
-      <td>${i.label}</td>
+      <td style="font-weight:600">${i.label}</td>
       <td><span class="badge ${i.isDone ? 'b-done' : 'b-pending'}">${i.status}</span></td>
+      <td style="font-weight:500">${i.assignee}</td>
       <td style="font-family:monospace">${i.dueDate}</td>
       <td style="color:#64748b">${i.summary}</td>
     </tr>
@@ -140,16 +161,15 @@ function processData(data) {
 
   const raw = data.map(r => {
     const status = findCol(r, ['Status', 'status']) || '';
-    // แก้ไข Logic การเช็คความหมายของคำว่า "เสร็จแล้ว" ให้กว้างขึ้น
-    const doneKeywords = ['Done', 'Closed', 'Resolved', 'Testing Done', 'Rejected', 'Finished'];
-    
+    const doneKeywords = ['Done', 'Closed', 'Resolved', 'Testing Done', 'Rejected'];
     return {
       key: findCol(r, ['Issue key', 'Key', 'issue_key']),
       type: findCol(r, ['Issue Type', 'Type', 'issue_type']),
       status: status,
       priority: findCol(r, ['Priority', 'priority']) || 'Medium',
+      assignee: findCol(r, ['Assignee', 'assignee', 'ผู้รับผิดชอบ']) || 'Unassigned',
       summary: findCol(r, ['Summary', 'summary']) || '',
-      dueDate: formatDate(findCol(r, ['Due date', 'Due Date', 'due_date'])),
+      dueDate: formatDate(findCol(r, ['Due date', 'Due Date'])),
       labels: findCol(r, ['Labels', 'labels']) || 'Unlabeled',
       isDone: doneKeywords.some(kw => status.toLowerCase() === kw.toLowerCase())
     };
@@ -158,65 +178,81 @@ function processData(data) {
   allGlobalIssues = raw.filter(i => i.key && i.key.startsWith('SGLS') && (i.type === 'Bug' || i.type === 'Defect'))
                        .map(i => ({ ...i, label: i.labels.split(',')[0].trim() }));
 
-  if (allGlobalIssues.length === 0) {
-    document.getElementById('debugInfo').innerText = "ไม่พบข้อมูล SGLS (Bug/Defect) ในไฟล์นี้";
-    return;
-  }
+  if (allGlobalIssues.length === 0) return alert("ไม่พบข้อมูล SGLS");
 
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('uploadZone').style.display = 'none';
 
   // Stats
   const total = allGlobalIssues.length;
-  const done = allGlobalIssues.filter(i => i.isDone).length;
+  const doneCount = allGlobalIssues.filter(i => i.isDone).length;
   document.getElementById('totalI').innerText = total;
-  document.getElementById('totalD').innerText = done;
-  document.getElementById('totalP').innerText = total - done;
-  document.getElementById('totalC').innerText = Math.round((done/total)*100) + '%';
+  document.getElementById('totalD').innerText = doneCount;
+  document.getElementById('totalP').innerText = total - doneCount;
+  document.getElementById('totalC').innerText = Math.round((doneCount/total)*100) + '%';
 
-  // Module Breakdown Table
   const modMap = {};
+  const assMap = {};
   const sevs = ['Highest', 'High', 'Medium', 'Low'];
-  
+
   allGlobalIssues.forEach(i => {
+    // Module Logic
     if (!modMap[i.label]) {
-      modMap[i.label] = { name: i.label, d: 0, p: 0 };
+      modMap[i.label] = { d: 0, p: 0 };
       sevs.forEach(s => modMap[i.label][s] = { d: 0, p: 0 });
     }
-    const target = i.isDone ? 'd' : 'p';
-    modMap[i.label][target]++;
-    if (modMap[i.label][i.priority]) modMap[i.label][i.priority][target]++;
+    i.isDone ? modMap[i.label].d++ : modMap[i.label].p++;
+    if(modMap[i.label][i.priority]) i.isDone ? modMap[i.label][i.priority].d++ : modMap[i.label][i.priority].p++;
+
+    // Assignee Logic
+    if (!assMap[i.assignee]) {
+      assMap[i.assignee] = { d: 0, p: 0 };
+      sevs.forEach(s => assMap[i.assignee][s] = 0);
+    }
+    if (i.isDone) {
+      assMap[i.assignee].d++;
+    } else {
+      assMap[i.assignee].p++;
+      if (assMap[i.assignee].hasOwnProperty(i.priority)) assMap[i.assignee][i.priority]++;
+    }
   });
 
-  document.getElementById('moduleDetailBody').innerHTML = Object.values(modMap).sort((a,b) => (b.d+b.p)-(a.d+a.p)).map(m => `
+  // 1. Render Module Detailed (Original Logic)
+  document.getElementById('moduleDetailBody').innerHTML = Object.entries(modMap).sort((a,b)=>(b[1].d+b[1].p)-(a[1].d+a[1].p)).map(([name, m]) => `
     <tr>
-      <td><strong>${m.name}</strong></td>
+      <td><strong>${name}</strong></td>
       ${sevs.map(s => `
         <td>
-          <span class="clickable b-done badge" onclick="filterByModuleAndStatus('${m.name}', 'done', '${s}')">${m[s].d}</span> / 
-          <span class="clickable b-pending badge" onclick="filterByModuleAndStatus('${m.name}', 'pending', '${s}')">${m[s].p}</span>
+          <span class="clickable text-done" onclick="filterList('module', '${name}', 'done', '${s}')">${m[s].d}</span> / 
+          <span class="clickable text-pending" onclick="filterList('module', '${name}', 'pending', '${s}')">${m[s].p}</span>
         </td>
       `).join('')}
-      <td style="background:#f8fafc">
-        <span class="clickable" style="font-weight:700; color:var(--success)" onclick="filterByModuleAndStatus('${m.name}', 'done')">${m.d}</span> / 
-        <span class="clickable" style="font-weight:700; color:var(--danger)" onclick="filterByModuleAndStatus('${m.name}', 'pending')">${m.p}</span>
-      </td>
+      <td style="background:#f8fafc"><strong>${m.d} / ${m.p}</strong></td>
     </tr>
   `).join('');
 
-  // Default view: Show all pending
+  // 2. Render Assignee Severity Matrix (Updated Section)
+  document.getElementById('assigneeSummaryBody').innerHTML = Object.entries(assMap).sort((a,b)=>b[1].p - a[1].p).map(([name, s]) => `
+    <tr>
+      <td><strong class="clickable" onclick="filterList('assignee', '${name}', 'all')">${name}</strong></td>
+      ${sevs.map(sev => `
+        <td class="sev-cell">
+          <span class="clickable ${s[sev] > 0 ? 'text-pending' : ''}" onclick="filterList('assignee', '${name}', 'pending', '${sev}')">
+            ${s[sev]}
+          </span>
+        </td>
+      `).join('')}
+      <td class="sev-cell text-done" style="background:#f8fafc" onclick="filterList('assignee', '${name}', 'done')">${s.d}</td>
+      <td class="sev-cell text-pending" style="background:#fff1f2; font-weight:bold" onclick="filterList('assignee', '${name}', 'pending')">${s.p}</td>
+    </tr>
+  `).join('');
+
   renderTable(allGlobalIssues.filter(i => !i.isDone));
 }
 
 document.getElementById('csvFile').addEventListener('change', e => {
   const file = e.target.files[0];
-  if (file) {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => processData(res.data)
-    });
-  }
+  if (file) Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => processData(res.data) });
 });
 </script>
 </body>
